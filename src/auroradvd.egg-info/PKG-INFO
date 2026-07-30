@@ -1,0 +1,28 @@
+Metadata-Version: 2.4
+Name: auroradvd
+Version: 0.1.0.dev0
+Summary: Modern DVD Player for Windows
+Author: Isidro Riquelme
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: PySide6>=6.8
+Requires-Dist: python-vlc>=3.0
+Requires-Dist: psutil>=6.0
+
+# AuroraDVD
+
+Modern DVD Player for Windows 11
+
+## Estado
+
+🚧 En desarrollo
+
+## Versión
+
+0.1.0-dev
+
+## Tecnologías
+
+- Python
+- PySide6
+- VLC

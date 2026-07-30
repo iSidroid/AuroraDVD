@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/auroradvd/__init__.py
+src/auroradvd/__main__.py
+src/auroradvd/application.py
+src/auroradvd.egg-info/PKG-INFO
+src/auroradvd.egg-info/SOURCES.txt
+src/auroradvd.egg-info/dependency_links.txt
+src/auroradvd.egg-info/requires.txt
+src/auroradvd.egg-info/top_level.txt
+src/auroradvd/core/__init__.py
+src/auroradvd/player/__init__.py
+src/auroradvd/resources/__init__.py
+src/auroradvd/services/__init__.py
+src/auroradvd/ui/__init__.py
+src/auroradvd/ui/main_window.py
+src/auroradvd/utils/__init__.py

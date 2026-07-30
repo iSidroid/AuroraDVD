@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auroradvd"
+version = "0.1.0.dev0"
+description = "Modern DVD Player for Windows"
+readme = "README.md"
+requires-python = ">=3.12"
+
+authors = [
+    {name="Isidro Riquelme"}
+]
+
+dependencies = [
+    "PySide6>=6.8",
+    "python-vlc>=3.0",
+    "psutil>=6.0"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
