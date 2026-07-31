@@ -14,3 +14,7 @@ Fecha: 19-07-2026
 ## Próxima sesión
 - Bootstrap de la aplicación.
 - Primera ventana de AuroraDVD.
+
+## completado (29/07/26)
+- Bootstrap de la aplicación.
+- Primera ventana de AuroraDVD.
