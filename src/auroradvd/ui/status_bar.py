@@ -14,7 +14,7 @@ Autor:
 
 from PySide6.QtWidgets import QLabel, QStatusBar
 
-from auroradvd.core.constant import STATUS_READY
+from auroradvd.core.constants import STATUS_READY
 
 
 class StatusBar(QStatusBar):
