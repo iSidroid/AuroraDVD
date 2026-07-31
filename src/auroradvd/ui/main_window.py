@@ -17,7 +17,7 @@ Autor:
 
 #from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar 
 from PySide6.QtWidgets import QMainWindow, QStatusBar #(se eliminó QLabel)
-from auroradvd.core.constant import (
+from auroradvd.core.constants import (
     APP_NAME,
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
