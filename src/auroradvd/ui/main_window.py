@@ -13,7 +13,8 @@ Autor:
 """
 
 #from PySide6.QtCore import Qt (V.1.0.0)
-
+from auroradvd.ui.actions import ApplicationActions
+from auroradvd.ui.menu_bar import MenuBar
 
 #from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar 
 from PySide6.QtWidgets import QMainWindow, QStatusBar #(se eliminó QLabel)
@@ -36,9 +37,11 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.resize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
-
+        self._actions = ApplicationActions()
         self._build_ui()
+    
 
+    
     def _build_ui(self) -> None:
         """
         Construye la interfaz principal.
@@ -46,7 +49,7 @@ class MainWindow(QMainWindow):
         ###Se eliminó mensaje que usaba QlLabel###
         #label = QLabel("Bienvenido a AuroraDVD")
         #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        self.setMenuBar(MenuBar(self._actions))
         self._video_widget = VideoWidget()
         self.setCentralWidget(self._video_widget)
        # self.setCentralWidget(label)
