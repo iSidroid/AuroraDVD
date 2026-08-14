@@ -37,6 +37,7 @@ class MenuBar(QMenuBar):
         file_menu = self.addMenu("&Archivo")
 
         file_menu.addAction(self._actions.open_dvd)
+        file_menu.addAction(self._actions.eject_drive)
         file_menu.addAction(self._actions.open_iso)
         file_menu.addAction(self._actions.open_ts)
         file_menu.addSeparator()

@@ -32,6 +32,9 @@ class ApplicationActions:
         self._open_dvd = QAction("Abrir DVD...")
         self._open_dvd.setStatusTip("Abre un DVD desde una unidad óptica")
 
+        self._eject_drive = QAction("Abrir bandeja unidad óptica")
+        self._eject_drive.setStatusTip("Abre la bandeja de la unidad óptica")
+
         self._open_iso = QAction("Abrir imagen ISO...")
         self._open_iso.setStatusTip("Abre una imagen ISO")
 
@@ -41,10 +44,15 @@ class ApplicationActions:
         self._exit = QAction("Salir")
         self._exit.setStatusTip("Cierra AuroraDVD")
 
+
+
     @property
     def open_dvd(self) -> QAction:
         return self._open_dvd
-
+    
+    @property
+    def eject_drive(self) -> QAction:
+        return self._eject_drive
 
     @property
     def open_iso(self) -> QAction:
