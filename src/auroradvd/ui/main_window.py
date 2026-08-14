@@ -12,11 +12,10 @@ Autor:
     Isidro Riquelme
 """
 
-#from PySide6.QtCore import Qt (V.1.0.0)
+from auroradvd.ui.actions import ApplicationActions
+from auroradvd.ui.menu_bar import MenuBar
 
-
-#from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar 
-from PySide6.QtWidgets import QMainWindow, QStatusBar #(se eliminó QLabel)
+from PySide6.QtWidgets import QApplication, QMainWindow
 from auroradvd.core.constants import (
     APP_NAME,
     DEFAULT_HEIGHT,
@@ -25,6 +24,9 @@ from auroradvd.core.constants import (
 
 from auroradvd.ui.widgets.video_widget import VideoWidget
 from auroradvd.ui.status_bar import StatusBar
+from auroradvd.ui.tool_bar import ToolBar
+from auroradvd.ui.dialogs.dvd_dialog import DvdDialog
+from auroradvd.services.optical_drive_service import OpticalDriveService
 
 class MainWindow(QMainWindow):
     """
@@ -36,27 +38,60 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.resize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
-
+        self._actions = ApplicationActions()
+        self._optical_drive_service = OpticalDriveService()
+        self._actions.exit.triggered.connect(QApplication.quit)
+        self._actions.open_dvd.triggered.connect(self._open_dvd)
+        self._actions.eject_drive.triggered.connect(self._eject_drive)
         self._build_ui()
+    
 
+    
     def _build_ui(self) -> None:
         """
         Construye la interfaz principal.
         """
-        ###Se eliminó mensaje que usaba QlLabel###
-        #label = QLabel("Bienvenido a AuroraDVD")
-        #label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        self.setMenuBar(MenuBar(self._actions))
         self._video_widget = VideoWidget()
         self.setCentralWidget(self._video_widget)
-       # self.setCentralWidget(label)
+        self.addToolBar(ToolBar(self._actions))
 
-       # status = QStatusBar()
-       # status.showMessage("Estado: Listo")
-       # self.setStatusBar(status)
 
         self._status_bar = StatusBar()
         self.setStatusBar(self._status_bar)
 
-        #con estos cabios se elimina esos "textos mágicos" en main window
 
+    def _open_dvd(self) -> None:
+        """
+        Abre el diálogo de selección de DVD.
+        """
+
+        dialog = DvdDialog(self)
+
+        if dialog.exec():
+            self._status_bar.showMessage("DVD seleccionado")
+
+    def _eject_drive(self) -> None:
+        """
+        Abre la bandeja de la primera unidad óptica disponible.
+        """
+
+        drives = self._optical_drive_service.get_optical_drives()
+
+        if not drives:
+            self._status_bar.showMessage(
+                "No se encontró ninguna unidad óptica"
+            )
+            return
+
+        drive = drives[0]
+
+        if self._optical_drive_service.eject(drive):
+            self._status_bar.showMessage(
+                f"Bandeja abierta: {drive}"
+            )
+        else:
+            self._status_bar.showMessage(
+                f"No se pudo abrir la bandeja: {drive}"
+            )
