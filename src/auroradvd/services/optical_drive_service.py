@@ -14,6 +14,7 @@ Autor:
 import ctypes
 from pathlib import Path
 
+from PySide6.QtCore import QStorageInfo
 
 class OpticalDriveService:
     """
@@ -38,6 +39,73 @@ class OpticalDriveService:
                 drives.append(Path(root))
 
         return drives
+    
+    def has_media(self, drive: Path) -> bool:
+        """
+        Determina si existe un medio insertado en la unidad óptica.
+
+        Args:
+            drive: Ruta de la unidad óptica, por ejemplo E:\\
+
+        Returns:
+            True si existe un medio disponible.
+            False si la unidad está vacía o no está lista.
+        """
+
+        storage = QStorageInfo(str(drive))
+
+        return storage.isValid() and storage.isReady()
+
+
+    def is_dvd_video(self, drive: Path) -> bool:
+        """
+        Determina si la unidad contiene una estructura DVD-Video válida.
+
+        Args:
+            drive: Ruta de la unidad óptica, por ejemplo E:\\
+
+        Returns:
+            True si existe una estructura DVD-Video básica.
+            False en caso contrario.
+        """
+
+        video_ts = drive / "VIDEO_TS"
+
+        return (
+            video_ts.is_dir()
+            and (video_ts / "VIDEO_TS.IFO").is_file()
+            and (video_ts / "VIDEO_TS.BUP").is_file()
+        )
+
+    def get_media_info(self, drive: Path) -> dict[str, object]:
+        """
+        Obtiene información básica del medio insertado.
+
+        Args:
+            drive: Ruta de la unidad óptica, por ejemplo E:\\
+
+        Returns:
+            Diccionario con información del medio.
+        """
+
+        storage = QStorageInfo(str(drive))
+
+        if not storage.isValid() or not storage.isReady():
+            return {
+                "drive": drive,
+                "label": "",
+                "ready": False,
+                "size": 0,
+                "is_dvd_video": False,
+            }
+
+        return {
+            "drive": drive,
+            "label": storage.displayName(),
+            "ready": True,
+            "size": storage.bytesTotal(),
+            "is_dvd_video": self.is_dvd_video(drive),
+        }
 
     def eject(self, drive: Path) -> bool:
         """
