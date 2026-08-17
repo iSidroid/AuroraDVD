@@ -35,6 +35,9 @@ class ApplicationActions:
         self._eject_drive = QAction("Abrir bandeja unidad óptica")
         self._eject_drive.setStatusTip("Abre la bandeja de la unidad óptica")
 
+        self._close_tray = QAction("Cerrar bandeja unidad óptica")
+        self._close_tray.setStatusTip("Cierra la bandeja de la unidad óptica")
+
         self._open_iso = QAction("Abrir imagen ISO...")
         self._open_iso.setStatusTip("Abre una imagen ISO")
 
@@ -53,6 +56,10 @@ class ApplicationActions:
     @property
     def eject_drive(self) -> QAction:
         return self._eject_drive
+
+    @property
+    def close_tray(self) -> QAction:
+        return self._close_tray
 
     @property
     def open_iso(self) -> QAction:

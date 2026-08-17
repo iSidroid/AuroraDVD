@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         self._actions.exit.triggered.connect(QApplication.quit)
         self._actions.open_dvd.triggered.connect(self._open_dvd)
         self._actions.eject_drive.triggered.connect(self._eject_drive)
+        self._actions.close_tray.triggered.connect(self._close_tray)
         self._build_ui()
     
 
@@ -95,3 +96,28 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(
                 f"No se pudo abrir la bandeja: {drive}"
             )
+
+    def _close_tray(self) -> None:
+        """
+        Cierra la bandeja de la primera unidad óptica disponible.
+        """
+
+        drives = self._optical_drive_service.get_optical_drives()
+
+        if not drives:
+            self._status_bar.showMessage(
+                "No se encontró ninguna unidad óptica"
+            )
+            return
+
+        drive = drives[0]
+
+        if self._optical_drive_service.close_tray(drive):
+            self._status_bar.showMessage(
+                f"Bandeja cerrada: {drive}"
+            )
+        else:
+            self._status_bar.showMessage(
+                f"No se pudo cerrar la bandeja: {drive}"
+            )
+            
