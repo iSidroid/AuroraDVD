@@ -14,7 +14,7 @@ Autor:
 
 from auroradvd.ui.actions import ApplicationActions
 from auroradvd.ui.menu_bar import MenuBar
-
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow
 from auroradvd.core.constants import (
     APP_NAME,
@@ -45,6 +45,8 @@ class MainWindow(QMainWindow):
         self._actions.eject_drive.triggered.connect(self._eject_drive)
         self._actions.close_tray.triggered.connect(self._close_tray)
         self._build_ui()
+        self._update_media_status()
+
     
 
     
@@ -92,6 +94,7 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(
                 f"Bandeja abierta: {drive}"
             )
+            self._update_media_status()    
         else:
             self._status_bar.showMessage(
                 f"No se pudo abrir la bandeja: {drive}"
@@ -116,8 +119,40 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(
                 f"Bandeja cerrada: {drive}"
             )
+            QTimer.singleShot(
+                1500,
+                self._update_media_status,
+            )    
         else:
             self._status_bar.showMessage(
                 f"No se pudo cerrar la bandeja: {drive}"
             )
+
+    def _update_media_status(self) -> None:
+        """
+        Actualiza la barra de estado con la información del medio.
+        """
+
+        drives = self._optical_drive_service.get_optical_drives()
+
+        if not drives:
+            self._status_bar.set_status(
+                "No se encontró ninguna unidad óptica"
+            )
+            return
+
+        drive = drives[0]
+
+        media_info = self._optical_drive_service.get_media_info(drive)
+
+        if not media_info["ready"]:
+            self._status_bar.clear_media_info()
+            return
+
+        self._status_bar.set_media_info(
+            drive=str(media_info["drive"]),
+            label=str(media_info["label"]),
+            size=int(media_info["size"]),
+            is_dvd_video=bool(media_info["is_dvd_video"]),
+        )            
             
