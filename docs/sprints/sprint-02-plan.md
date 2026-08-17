@@ -210,7 +210,7 @@ Al finalizar el sprint se realizará un commit que represente el cierre funciona
 
 ## 10. Estado del Sprint
 
-**Estado:** 🟡 En progreso
+**Estado:** 🟢 Completado
 
 ### Progreso
 
@@ -219,23 +219,25 @@ Al finalizar el sprint se realizará un commit que represente el cierre funciona
 * [x] Identificar la unidad óptica `E:`.
 * [x] Crear `OpticalDriveService`.
 * [x] Implementar apertura de bandeja.
+* [x] Implementar cierre de bandeja.
 * [x] Integrar la acción "Abrir bandeja unidad óptica" con la UI.
+* [x] Integrar la acción "Cerrar bandeja unidad óptica" con la UI.
 * [x] Detectar presencia de medio mediante `QStorageInfo`.
 * [x] Implementar `is_dvd_video()`.
+* [x] Robustecer la validación de estructuras DVD-Video.
 * [x] Implementar `get_media_info()`.
+* [x] Integrar información del medio en la interfaz.
 * [x] Probar unidad óptica sin medio.
 * [x] Probar DVD-Video real.
 * [x] Probar DVD de datos real.
+* [x] Probar ruta/unidad no disponible.
 * [x] Verificar etiqueta del medio.
 * [x] Verificar capacidad reportada por Windows.
-* [ ] Implementar cierre de bandeja.
-* [ ] Robustecer la validación de estructuras DVD-Video.
-* [ ] Evaluar soporte para múltiples unidades ópticas.
-* [ ] Integrar información del medio en la interfaz.
-* [ ] Realizar pruebas adicionales.
-* [ ] Documentar resultados finales.
-* [ ] Realizar commit final.
-* [ ] Cerrar Sprint 02.
+* [x] Realizar pruebas adicionales de inserción y extracción de medios.
+* [x] Documentar resultados finales.
+* [x] Realizar commits funcionales.
+* [x] Realizar push de los cambios a `origin/dev`.
+* [x] Cerrar Sprint 02.
 
 ### Pruebas realizadas
 
@@ -297,17 +299,64 @@ is_dvd_video()  → False
 Resultado:
 
 ```text
-has_media()     → False
-is_dvd_video()  → False
+has_media()      → False
+is_dvd_video()   → False
 
 get_media_info()
-    ready       → False
-    label       → ""
-    size        → 0
+    ready        → False
+    label        → ""
+    size         → 0
     is_dvd_video → False
 ```
 
-### Estado técnico actual
+#### Ruta/unidad no disponible
+
+Se probó una ruta no existente (`Z:\`) para validar el comportamiento cuando no existe una unidad disponible.
+
+Resultado:
+
+```text
+has_media: False
+is_dvd_video: False
+
+get_media_info:
+    ready        → False
+    label        → ""
+    size         → 0
+    is_dvd_video → False
+```
+
+No se generaron excepciones inesperadas.
+
+#### Control de bandeja
+
+Se realizaron pruebas físicas con la unidad `E:`:
+
+```text
+Abrir bandeja                  → Correcto
+Cerrar bandeja                 → Correcto
+Abrir/cerrar repetidamente     → Correcto
+Cerrar bandeja sin medio       → Correcto
+```
+
+#### Actualización de información del medio
+
+Se verificó la actualización de la barra de estado después de las operaciones de bandeja:
+
+```text
+DVD-Video:
+DVD-Video | G3 | E:\ | 4.26 GB
+
+DVD de datos:
+DVD de datos | varios | E:\ | 1.71 GB
+
+Sin medio:
+No hay ningún medio insertado
+```
+
+La actualización posterior al cierre de la bandeja utiliza una única ejecución diferida para dar tiempo al sistema operativo a montar el medio. No se utiliza polling permanente.
+
+### Estado técnico final
 
 `OpticalDriveService` dispone actualmente de las siguientes operaciones:
 
@@ -319,21 +368,73 @@ has_media(drive)
     → Determina si existe un medio insertado.
 
 is_dvd_video(drive)
-    → Determina si existe una estructura DVD-Video básica.
+    → Valida una estructura DVD-Video básica.
 
 get_media_info(drive)
     → Obtiene información básica del medio.
 
 eject(drive)
     → Abre la bandeja de la unidad.
+
+close_tray(drive)
+    → Cierra la bandeja de la unidad.
 ```
 
-### Observación
+### Integración con la interfaz
 
-La detección actual de DVD-Video se basa en la existencia de la carpeta `VIDEO_TS` y de los archivos `VIDEO_TS.IFO` y `VIDEO_TS.BUP`.
+Las siguientes acciones están disponibles en AuroraDVD:
 
-Durante el desarrollo se identificó como posible mejora futura la validación más profunda de la estructura DVD-Video, con el objetivo de evitar falsos positivos en discos de datos que contengan estructuras `VIDEO_TS` artificiales o incompletas.
+```text
+Abrir bandeja unidad óptica
+Cerrar bandeja unidad óptica
+```
 
+La información del medio se presenta mediante la barra de estado.
+
+La arquitectura mantiene la separación:
+
+```text
+UI
+ │
+ ▼
+ApplicationActions
+ │
+ ▼
+OpticalDriveService
+ │
+ ▼
+Sistema operativo
+```
+
+### Trabajo futuro
+
+Las siguientes funcionalidades quedan fuera del cierre del Sprint 02:
+
+* Soporte avanzado para múltiples unidades ópticas.
+* Selección de unidad óptica desde la interfaz.
+* Validación profunda del contenido binario de archivos IFO.
+* Detección y análisis completo de títulos DVD.
+* Reproducción del contenido DVD.
+* Navegación por menús DVD.
+
+Estas funcionalidades serán abordadas en futuros sprints.
+
+### Commits funcionales
+
+Los principales bloques del Sprint 02 quedaron registrados mediante los siguientes commits:
+
+```text
+5ee709b  feat(optical): add optical media detection
+f2d472b  feat(optical): add tray control
+7104b0f  feat(optical): robust dvd video validation
+0d2fa38  feat(ui): show optical media information
+```
+
+Todos los cambios funcionales fueron enviados a:
+
+```text
+origin/dev
+```
 
 ---
 
