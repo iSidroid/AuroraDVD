@@ -59,23 +59,49 @@ class OpticalDriveService:
 
     def is_dvd_video(self, drive: Path) -> bool:
         """
-        Determina si la unidad contiene una estructura DVD-Video válida.
+        Determina si la unidad contiene una estructura DVD-Video básica y válida.
+
+        La validación comprueba:
+            - Directorio VIDEO_TS.
+            - Archivos VIDEO_TS.IFO y VIDEO_TS.BUP.
+            - Al menos un título VTS_XX_0.IFO.
+            - Archivo VTS_XX_0.BUP correspondiente.
 
         Args:
             drive: Ruta de la unidad óptica, por ejemplo E:\\
 
         Returns:
-            True si existe una estructura DVD-Video básica.
+            True si existe una estructura DVD-Video válida.
             False en caso contrario.
         """
 
         video_ts = drive / "VIDEO_TS"
 
-        return (
-            video_ts.is_dir()
-            and (video_ts / "VIDEO_TS.IFO").is_file()
-            and (video_ts / "VIDEO_TS.BUP").is_file()
-        )
+        try:
+            if not video_ts.is_dir():
+                return False
+
+            if not (video_ts / "VIDEO_TS.IFO").is_file():
+                return False
+
+            if not (video_ts / "VIDEO_TS.BUP").is_file():
+                return False
+
+            title_ifos = sorted(video_ts.glob("VTS_[0-9][0-9]_0.IFO"))
+
+            if not title_ifos:
+                return False
+
+            for title_ifo in title_ifos:
+                title_bup = title_ifo.with_suffix(".BUP")
+
+                if not title_bup.is_file():
+                    return False
+
+            return True
+
+        except OSError:
+            return False
 
     def get_media_info(self, drive: Path) -> dict[str, object]:
         """
