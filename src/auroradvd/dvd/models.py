@@ -15,6 +15,7 @@ Autor:
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from enum import Enum
 from pathlib import Path
 
 
@@ -49,3 +50,20 @@ class DvdVideo:
     drive: Path
     label: str
     titles: list[DvdTitle] = field(default_factory=list)
+
+
+class IfoType(Enum):
+    """Tipo de archivo IFO."""
+
+    VMG = "VMG"
+    VTS = "VTS"
+
+
+@dataclass(frozen=True)
+class IfoHeader:
+    """Información básica de la cabecera de un archivo IFO."""
+
+    identifier: str
+    type: IfoType
+    last_sector: int
+    version: int

@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from auroradvd.dvd.models import DvdChapter, DvdTitle, DvdVideo
+from auroradvd.dvd.models import IfoHeader, IfoType
 
 
 def test_dvd_chapter_creation():
@@ -46,3 +47,36 @@ def test_dvd_video_creation():
     assert dvd.label == "TEST_DVD"
     assert len(dvd.titles) == 1
     assert dvd.titles[0] is title
+
+
+def test_ifo_type_values():
+    assert IfoType.VMG.value == "VMG"
+    assert IfoType.VTS.value == "VTS"
+
+
+def test_vmg_ifo_header():
+    header = IfoHeader(
+        identifier="DVDVIDEO-VMG",
+        type=IfoType.VMG,
+        last_sector=1234,
+        version=2,
+    )
+
+    assert header.identifier == "DVDVIDEO-VMG"
+    assert header.type is IfoType.VMG
+    assert header.last_sector == 1234
+    assert header.version == 2
+
+
+def test_vts_ifo_header():
+    header = IfoHeader(
+        identifier="DVDVIDEO-VTS",
+        type=IfoType.VTS,
+        last_sector=5678,
+        version=1,
+    )
+
+    assert header.identifier == "DVDVIDEO-VTS"
+    assert header.type is IfoType.VTS
+    assert header.last_sector == 5678
+    assert header.version == 1    
