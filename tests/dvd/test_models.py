@@ -4,7 +4,6 @@ Pruebas para los modelos DVD-Video.
 
 from datetime import timedelta
 from pathlib import Path
-
 from auroradvd.dvd.models import DvdChapter, DvdTitle, DvdVideo
 from auroradvd.dvd.models import IfoHeader, IfoType
 
@@ -58,13 +57,15 @@ def test_vmg_ifo_header():
     header = IfoHeader(
         identifier="DVDVIDEO-VMG",
         type=IfoType.VMG,
-        last_sector=1234,
+        last_sector_set=1234,
+        last_sector_ifo=567,
         version=2,
     )
 
     assert header.identifier == "DVDVIDEO-VMG"
     assert header.type is IfoType.VMG
-    assert header.last_sector == 1234
+    assert header.last_sector_set == 1234
+    assert header.last_sector_ifo == 567
     assert header.version == 2
 
 
@@ -72,11 +73,13 @@ def test_vts_ifo_header():
     header = IfoHeader(
         identifier="DVDVIDEO-VTS",
         type=IfoType.VTS,
-        last_sector=5678,
+        last_sector_set=5678,
+        last_sector_ifo=123,
         version=1,
     )
 
     assert header.identifier == "DVDVIDEO-VTS"
     assert header.type is IfoType.VTS
-    assert header.last_sector == 5678
+    assert header.last_sector_set == 5678
+    assert header.last_sector_ifo == 123
     assert header.version == 1    

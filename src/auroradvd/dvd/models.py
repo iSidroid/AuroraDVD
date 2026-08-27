@@ -65,5 +65,6 @@ class IfoHeader:
 
     identifier: str
     type: IfoType
-    last_sector: int
+    last_sector_set: int
+    last_sector_ifo: int
     version: int

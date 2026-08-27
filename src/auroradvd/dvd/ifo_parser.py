@@ -14,7 +14,7 @@ Autor:
 
 from pathlib import Path
 
-from auroradvd.dvd.models import IfoType
+from auroradvd.dvd.models import IfoHeader, IfoType
 
 
 class IfoParser:
@@ -65,6 +65,46 @@ class IfoParser:
             return IfoType.VTS
 
         return None
+
+
+    def parse_header(self) -> IfoHeader:
+        """
+        Lee y representa la cabecera básica de un archivo IFO.
+
+        Returns:
+            IfoHeader con la información básica detectada.
+
+        Raises:
+            ValueError: si el identificador no corresponde a un IFO válido.
+            OSError: si el archivo no puede leerse.
+        """
+
+        with self.path.open("rb") as file:
+            data = file.read(0x22)
+
+        if len(data) < 0x22:
+            raise ValueError("Archivo IFO demasiado pequeño")
+
+        identifier = data[0:12]
+
+        if identifier == self.DVD_VIDEO_VMG_MAGIC:
+            ifo_type = IfoType.VMG
+        elif identifier == self.DVD_VIDEO_VTS_MAGIC:
+            ifo_type = IfoType.VTS
+        else:
+            raise ValueError("Identificador IFO no válido")
+
+        last_sector_set = int.from_bytes(data[0x0C:0x10], "big")
+        last_sector_ifo = int.from_bytes(data[0x1C:0x20], "big")
+        version = int.from_bytes(data[0x20:0x22], "big")
+
+        return IfoHeader(
+            identifier=identifier.decode("ascii"),
+            type=ifo_type,
+            last_sector_set=last_sector_set,
+            last_sector_ifo=last_sector_ifo,
+            version=version,
+        )
 
     def is_valid(self) -> bool:
         """
