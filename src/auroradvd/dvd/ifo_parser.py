@@ -12,9 +12,11 @@ Autor:
     Isidro Riquelme
 """
 
+from csv import reader
 from pathlib import Path
-
+from auroradvd.dvd.binary_reader import BinaryReader
 from auroradvd.dvd.models import IfoHeader, IfoType
+
 
 
 class IfoParser:
@@ -78,14 +80,8 @@ class IfoParser:
             ValueError: si el identificador no corresponde a un IFO válido.
             OSError: si el archivo no puede leerse.
         """
-
-        with self.path.open("rb") as file:
-            data = file.read(0x22)
-
-        if len(data) < 0x22:
-            raise ValueError("Archivo IFO demasiado pequeño")
-
-        identifier = data[0:12]
+        reader = BinaryReader(self.path)
+        identifier = reader.read_bytes(0, 12)
 
         if identifier == self.DVD_VIDEO_VMG_MAGIC:
             ifo_type = IfoType.VMG
@@ -94,9 +90,9 @@ class IfoParser:
         else:
             raise ValueError("Identificador IFO no válido")
 
-        last_sector_set = int.from_bytes(data[0x0C:0x10], "big")
-        last_sector_ifo = int.from_bytes(data[0x1C:0x20], "big")
-        version = int.from_bytes(data[0x20:0x22], "big")
+        last_sector_set = reader.read_uint32_be(0x0C)
+        last_sector_ifo = reader.read_uint32_be(0x1C)
+        version = reader.read_uint16_be(0x20)
 
         return IfoHeader(
             identifier=identifier.decode("ascii"),
