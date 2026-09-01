@@ -87,4 +87,56 @@ def test_read_uint32_be_insufficient_data(tmp_path: Path):
     reader = BinaryReader(file_path)
 
     with pytest.raises(ValueError):
-        reader.read_uint32_be(0)       
+        reader.read_uint32_be(0)
+
+def test_read_uint8(tmp_path: Path):
+    file_path = tmp_path / "test.bin"
+
+    file_path.write_bytes(
+        b"\x00\x7F\xFF"
+    )
+
+    reader = BinaryReader(file_path)
+
+    assert reader.read_uint8(0) == 0
+    assert reader.read_uint8(1) == 127
+    assert reader.read_uint8(2) == 255
+
+def test_read_bcd8(tmp_path: Path):
+    file_path = tmp_path / "test.bin"
+
+    file_path.write_bytes(
+        b"\x00\x12\x25\x59"
+    )
+
+    reader = BinaryReader(file_path)
+
+    assert reader.read_bcd8(0) == 0
+    assert reader.read_bcd8(1) == 12
+    assert reader.read_bcd8(2) == 25
+    assert reader.read_bcd8(3) == 59
+
+def test_read_bcd8_invalid_value(tmp_path: Path):
+    file_path = tmp_path / "test.bin"
+
+    file_path.write_bytes(
+        b"\x1A"
+    )
+
+    reader = BinaryReader(file_path)
+
+    with pytest.raises(ValueError):
+        reader.read_bcd8(0)
+
+def test_sector_to_offset():
+    reader = BinaryReader(Path("dummy.bin"))
+
+    assert reader.sector_to_offset(0) == 0
+    assert reader.sector_to_offset(1) == 2048
+    assert reader.sector_to_offset(13) == 26624
+
+def test_sector_to_offset_negative():
+    reader = BinaryReader(Path("dummy.bin"))
+
+    with pytest.raises(ValueError):
+        reader.sector_to_offset(-1)

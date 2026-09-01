@@ -13,6 +13,7 @@ Autor:
 """
 
 from pathlib import Path
+from auroradvd.dvd.constants import DVD_SECTOR_SIZE
 
 
 class BinaryReader:
@@ -48,6 +49,28 @@ class BinaryReader:
         with self.path.open("rb") as file:
             file.seek(offset)
             return file.read(size)
+
+    def read_uint8(self, offset: int) -> int:
+        """
+        Lee un entero sin signo de 8 bits.
+
+        Args:
+            offset: Posición inicial dentro del archivo.
+
+        Returns:
+            El valor entero representado por el byte.
+
+        Raises:
+            OSError: si el archivo no puede leerse.
+            ValueError: si offset es negativo o no hay suficientes bytes.
+        """
+
+        data = self.read_bytes(offset, 1)
+
+        if len(data) != 1:
+            raise ValueError("No hay suficientes bytes para leer un uint8")
+
+        return data[0]
 
     def read_uint32_be(self, offset: int) -> int:
         """
@@ -91,4 +114,49 @@ class BinaryReader:
         if len(data) != 2:
             raise ValueError("No hay suficientes bytes para leer un uint16")
 
-        return int.from_bytes(data, byteorder="big", signed=False)           
+        return int.from_bytes(data, byteorder="big", signed=False)
+
+    def read_bcd8(self, offset: int) -> int:
+        """
+        Lee un byte codificado en BCD (Binary-Coded Decimal).
+
+        Args:
+            offset: Posición inicial dentro del archivo.
+
+        Returns:
+            El valor decimal representado por el byte.
+
+        Raises:
+            OSError: si el archivo no puede leerse.
+            ValueError: si offset es negativo, no hay suficientes bytes
+                o el byte no contiene un valor BCD válido.
+        """
+
+        value = self.read_uint8(offset)
+
+        high = (value >> 4) & 0x0F
+        low = value & 0x0F
+
+        if high > 9 or low > 9:
+            raise ValueError("Byte BCD inválido")
+
+        return high * 10 + low
+
+    def sector_to_offset(self, sector: int) -> int:
+        """
+        Convierte un número de sector DVD en un offset de archivo.
+
+        Args:
+            sector: Número de sector DVD.
+
+        Returns:
+            Offset correspondiente dentro del archivo.
+
+        Raises:
+            ValueError: si el sector es negativo.
+        """
+
+        if sector < 0:
+            raise ValueError("El sector no puede ser negativo")
+
+        return sector * DVD_SECTOR_SIZE
