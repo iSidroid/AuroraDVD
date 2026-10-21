@@ -138,7 +138,6 @@ class IfoParser:
 
         Returns:
             Tabla con las entradas de búsqueda de títulos.
-
         Raises:
             ValueError: si el archivo o la tabla no son válidos.
             OSError: si no puede leerse el archivo.
@@ -513,12 +512,28 @@ class IfoParser:
         if header.program_map_offset == 0:
             raise ValueError("El PGC no contiene mapa de programas")
 
-        if not (
-            self.PGC_HEADER_SIZE
-            <= header.program_map_offset
-            < self.PGC_HEADER_SIZE + 0x10000
-        ):
+        if header.program_map_offset < self.PGC_HEADER_SIZE:
             raise ValueError("Offset del mapa de programas no válido")
+
+        table = self.read_pgc_search_table()
+        pgc_relative_offset = header.offset - table.offset
+
+        if not any(
+            entry.pgc_start_byte == pgc_relative_offset
+            for entry in table.entries
+        ):
+            raise ValueError("El PGC no pertenece a esta tabla")
+
+        relative_end = (
+            pgc_relative_offset
+            + header.program_map_offset
+            + header.number_programs
+        )
+
+        if relative_end > table.last_byte + 1:
+            raise ValueError(
+                "El mapa de programas excede los límites de VTS_PGCIT"
+            )
 
         reader = BinaryReader(self.path)
         offset = header.offset + header.program_map_offset
