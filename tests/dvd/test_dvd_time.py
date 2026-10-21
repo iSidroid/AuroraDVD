@@ -26,7 +26,6 @@ def test_decode_pal_time():
     assert result.frame_rate == "PAL"
     assert result.frames == 12
     assert result.duration.total_seconds() == pytest.approx(62.48)
-    #assert result.duration.total_seconds() == pytest.approx(63.48)
 
 @pytest.mark.parametrize(
     "raw",
@@ -38,7 +37,6 @@ def test_decode_pal_time():
         bytes.fromhex("00 00 00 00"),  # Código reservado
         bytes.fromhex("00 00 00 80"),  # Código reservado
         bytes.fromhex("00 00 00 5A"),  # 30 fotogramas NTSC
-        #bytes.fromhex("00 00 00 59"),  # 25 fotogramas PAL
         bytes.fromhex("00 00 00 65"),  # 25 fotogramas PAL: fuera de rango
     ],
 )
