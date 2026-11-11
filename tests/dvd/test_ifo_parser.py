@@ -78,6 +78,7 @@ def test_parse_vts_header(tmp_path: Path):
     assert header.last_sector_ifo == 15
     assert header.version == 0x0011
 
+
 def test_parse_vts_header_uses_binary_fields(tmp_path: Path):
     ifo_path = tmp_path / "VTS_01_0.IFO"
 
@@ -104,6 +105,7 @@ def test_parse_vts_header_uses_binary_fields(tmp_path: Path):
     assert header.last_sector_ifo == 15
     assert header.version == 0x0011
 
+
 def test_parse_header_rejects_truncated_ifo(tmp_path: Path):
     ifo_path = tmp_path / "VTS_01_0.IFO"
 
@@ -115,6 +117,7 @@ def test_parse_header_rejects_truncated_ifo(tmp_path: Path):
 
     with pytest.raises(ValueError):
         parser.parse_header()
+
 
 def test_read_program_map_rejects_offset_outside_file(tmp_path):
     from auroradvd.dvd.ifo_parser import IfoParser
@@ -187,3 +190,217 @@ def test_read_program_map_rejects_data_outside_pgcit(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         parser.read_program_map(header)
+
+
+def test_read_part_of_title_search_table(tmp_path: Path):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    # Cabecera VTS válida y puntero a VTS_PTT_SRPT, sector 1.
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    # VTS_PTT_SRPT: un título, tabla de offsets y dos partes.
+    table_offset = 0x800
+    data[table_offset:table_offset + 8] = (
+        (1).to_bytes(2, "big")       # Número de títulos
+        + (0).to_bytes(2, "big")     # Reservado
+        + (19).to_bytes(4, "big")    # Último byte: offset 19
+    )
+
+    # Offset relativo al comienzo de la tabla: byte 12.
+    data[table_offset + 8:table_offset + 12] = (
+        12
+    ).to_bytes(4, "big")
+
+    # Dos entradas PTT: PGC 1, programas 1 y 2.
+    data[table_offset + 12:table_offset + 16] = (
+        (1).to_bytes(2, "big") + (1).to_bytes(2, "big")
+    )
+    data[table_offset + 16:table_offset + 20] = (
+        (1).to_bytes(2, "big") + (2).to_bytes(2, "big")
+    )
+
+    ifo_path.write_bytes(data)
+    parser = IfoParser(ifo_path)
+
+    result = parser.read_part_of_title_search_table()
+
+    assert result.offset == table_offset
+    assert result.last_byte == 19
+    assert len(result.titles) == 1
+    assert result.titles[0].title_number == 1
+    assert len(result.titles[0].parts) == 2
+    assert result.titles[0].parts[0].pgc_number == 1
+    assert result.titles[0].parts[0].program_number == 1
+    assert result.titles[0].parts[1].pgc_number == 1
+    assert result.titles[0].parts[1].program_number == 2
+
+
+def test_read_part_of_title_search_table_rejects_zero_pointer(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x100)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (0).to_bytes(4, "big")
+
+    ifo_path.write_bytes(data)
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(ValueError, match="puntero VTS_PTT_SRPT es cero"):
+        parser.read_part_of_title_search_table()
+
+
+def test_read_part_of_title_search_table_rejects_truncated_header(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+
+    # Sector 1: solo quedan 4 bytes antes del final del archivo.
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    ifo_path.write_bytes(data[:0x804])
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(ValueError, match="Cabecera VTS_PTT_SRPT incompleta"):
+        parser.read_part_of_title_search_table()
+
+
+def test_read_part_of_title_search_table_rejects_offset_inside_pointer_table(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    table_offset = 0x800
+
+    # Cabecera: un título, último byte relativo = 15.
+    data[table_offset:table_offset + 8] = (
+        (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+        + (15).to_bytes(4, "big")
+    )
+
+    # Offset relativo 8: apunta al inicio de la propia tabla
+    # de punteros, no al área de entradas PTT.
+    data[table_offset + 8:table_offset + 12] = (
+        8
+    ).to_bytes(4, "big")
+
+    ifo_path.write_bytes(data)
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(ValueError, match="Offset inválido para el título"):
+        parser.read_part_of_title_search_table()
+
+
+def test_read_part_of_title_search_table_rejects_truncated_table(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    table_offset = 0x800
+
+    # Cabecera: un título, pero la tabla declara 256 bytes.
+    data[table_offset:table_offset + 8] = (
+        (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+        + (255).to_bytes(4, "big")
+    )
+
+    ifo_path.write_bytes(data[:0x810])
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(
+        ValueError,
+        match="VTS_PTT_SRPT excede los datos disponibles",
+    ):
+        parser.read_part_of_title_search_table()
+
+
+def test_read_part_of_title_search_table_rejects_zero_pgc(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    table_offset = 0x800
+
+    # Un título, una entrada PTT de cuatro bytes.
+    data[table_offset:table_offset + 8] = (
+        (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+        + (15).to_bytes(4, "big")
+    )
+
+    # Offset relativo 12: después de la cabecera y el puntero.
+    data[table_offset + 8:table_offset + 12] = (
+        12
+    ).to_bytes(4, "big")
+
+    # PGC = 0 (inválido), programa = 1.
+    data[table_offset + 12:table_offset + 16] = (
+        (0).to_bytes(2, "big")
+        + (1).to_bytes(2, "big")
+    )
+
+    ifo_path.write_bytes(data)
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(
+        ValueError,
+        match="Referencia PGC/programa inválida",
+    ):
+        parser.read_part_of_title_search_table()
+
+
+def test_read_part_of_title_search_table_rejects_zero_program(
+    tmp_path: Path,
+):
+    ifo_path = tmp_path / "VTS_01_0.IFO"
+    data = bytearray(0x1000)
+
+    data[0:12] = b"DVDVIDEO-VTS"
+    data[0xC8:0xCC] = (1).to_bytes(4, "big")
+
+    table_offset = 0x800
+
+    data[table_offset:table_offset + 8] = (
+        (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+        + (15).to_bytes(4, "big")
+    )
+
+    data[table_offset + 8:table_offset + 12] = (
+        12
+    ).to_bytes(4, "big")
+
+    # PGC = 1 (válido), programa = 0 (inválido).
+    data[table_offset + 12:table_offset + 16] = (
+        (1).to_bytes(2, "big")
+        + (0).to_bytes(2, "big")
+    )
+
+    ifo_path.write_bytes(data)
+    parser = IfoParser(ifo_path)
+
+    with pytest.raises(
+        ValueError,
+        match="Referencia PGC/programa inválida",
+    ):
+        parser.read_part_of_title_search_table()
