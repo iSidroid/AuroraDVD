@@ -9,6 +9,8 @@ from PySide6.QtWidgets import QApplication
 
 from auroradvd.player.dvd_player import DvdPlayer
 from auroradvd.player.playback_status import PlaybackState, PlaybackStatus, Tracks
+from auroradvd.ui.main_window import MainWindow
+from auroradvd.ui.widgets.playback_controls import PlaybackControls
 
 
 def fake_engine() -> Mock:
@@ -167,3 +169,128 @@ def test_audio_video_and_subtitle_selection_uses_engine_track_ids(player):
     status = published.call_args.args[1]
     assert status.audio == Tracks(((14, "French"),), 14)
     assert status.subtitles == Tracks()
+
+
+@pytest.fixture
+def qapp(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    return QApplication.instance() or QApplication([])
+
+
+def test_controls_render_and_emit_only_user_selection(qapp):
+    controls = PlaybackControls()
+    chapter = Mock()
+    tracks = Mock()
+    controls.chapter_requested.connect(chapter)
+    controls.track_requested.connect(tracks)
+    controls.show()
+    assert controls.play_button.isEnabled()
+    assert not controls.stop_button.isEnabled()
+
+    controls.update_status(PlaybackStatus(
+        state=PlaybackState.PLAYING,
+        can_pause=True,
+        title=1,
+        chapters=(1, 2),
+        chapter=1,
+        audio=Tracks(((10, "Español"), (11, "Inglés")), 11),
+        video=Tracks(((2, "Video"),), 2),
+        subtitles=Tracks(((-1, "Desactivados"), (22, "Español")), 22),
+    ))
+    assert controls.pause_button.isEnabled()
+    assert not controls.previous_button.isEnabled()
+    assert controls.next_button.isEnabled()
+    assert controls.audio.currentData() == 11
+    assert controls.video.isHidden()
+    assert controls.subtitles.currentData() == 22
+    chapter.assert_not_called()
+    tracks.assert_not_called()
+
+    controls.chapter.activated.emit(1)
+    controls.audio.activated.emit(0)
+    controls.subtitles.activated.emit(0)
+    chapter.assert_called_once_with(2)
+    assert [call.args for call in tracks.call_args_list] == [("audio", 10), ("subtitles", -1)]
+
+    controls.update_status(PlaybackStatus(
+        state=PlaybackState.PAUSED,
+        title=2,
+        chapters=(1, 2),
+        chapter=2,
+        video=Tracks(((3, "Video 1"), (4, "Video 2")), 4),
+    ))
+    assert controls.resume_button.isEnabled()
+    assert controls.previous_button.isEnabled()
+    assert not controls.next_button.isEnabled()
+    assert controls.video.isVisible()
+    assert controls.video.currentData() == 4
+    assert not controls.subtitles.isEnabled()
+    assert controls.subtitles.currentText() == "Sin subtítulos"
+    controls.close()
+
+
+def test_fullscreen_reveals_same_controls_and_escape_restores_window(qapp, monkeypatch):
+    monkeypatch.setattr(
+        "auroradvd.ui.main_window.OpticalDriveService.get_optical_drives", lambda self: []
+    )
+    window = MainWindow()
+    window.showMaximized()
+    qapp.processEvents()
+    window.activateWindow()
+    qapp.processEvents()
+    video = window._video_widget
+    controls = window._controls
+    handle = video.show_video()
+    monkeypatch.setattr(MainWindow, "isActiveWindow", lambda self: True)
+
+    def move_cursor(point):
+        monkeypatch.setattr(
+            "auroradvd.ui.widgets.video_widget.QCursor",
+            SimpleNamespace(pos=lambda: video.mapToGlobal(point)),
+        )
+        video._update_control_visibility()
+
+    controls.fullscreen_button.click()
+    qapp.processEvents()
+    assert window.isFullScreen()
+    assert window.menuBar().isHidden()
+    assert controls.isHidden()
+
+    move_cursor(QPoint(video.width() // 2, video.height() - 1))
+    assert controls.isVisible()
+    move_cursor(controls.geometry().center())
+    assert controls.isVisible()
+    move_cursor(QPoint(10, 10))
+    assert controls.isHidden()
+
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    qapp.processEvents()
+    assert not window.isFullScreen()
+    assert window.isMaximized()
+    assert controls.isVisible()
+    assert video.show_video() == handle
+    window.close()
+
+
+
+def test_play_reopens_available_disc_or_asks_for_a_drive(qapp, monkeypatch):
+    monkeypatch.setattr(
+        "auroradvd.ui.main_window.OpticalDriveService.get_optical_drives", lambda self: []
+    )
+    open_dvd = Mock()
+    play_dvd = Mock()
+    monkeypatch.setattr(MainWindow, "_open_dvd", open_dvd)
+    monkeypatch.setattr(MainWindow, "_play_dvd", play_dvd)
+    window = MainWindow()
+    window._last_drive = Path("E:/")
+    has_media = Mock(return_value=True)
+    monkeypatch.setattr(window._optical_drive_service, "has_media", has_media)
+
+    window._controls.play_button.click()
+    play_dvd.assert_called_once_with(Path("E:/"))
+    open_dvd.assert_not_called()
+
+    has_media.return_value = False
+    window._controls.play_button.click()
+    open_dvd.assert_called_once_with()
+    window.close()
