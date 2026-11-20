@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from auroradvd.player.playback_status import PlaybackState, PlaybackStatus
+from auroradvd.ui.widgets.playback_progress import PlaybackProgress
 
 
 class PlaybackControls(QFrame):
@@ -92,6 +93,8 @@ class PlaybackControls(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 5, 8, 5)
         layout.setSpacing(4)
+        self.progress = PlaybackProgress()
+        layout.addWidget(self.progress)
         layout.addLayout(transport)
         layout.addLayout(navigation)
         self.update_status(PlaybackStatus())
@@ -131,6 +134,9 @@ class PlaybackControls(QFrame):
                 combo.setCurrentIndex(0)
 
     def update_status(self, status: PlaybackStatus) -> None:
+        for combo in (self.chapter, self.audio, self.video, self.subtitles):
+            combo.setProperty("dvdTitle", status.title)
+        self.progress.update_status(status)
         state = status.state
         self.play_button.setEnabled(state == PlaybackState.IDLE)
         self.pause_button.setEnabled(state == PlaybackState.PLAYING and status.can_pause)

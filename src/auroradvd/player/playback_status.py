@@ -23,6 +23,9 @@ class PlaybackStatus:
     state: PlaybackState = PlaybackState.IDLE
     can_pause: bool = False
     title: int = 0
+    elapsed_ms: int | None = None
+    duration_ms: int | None = None
+    seekable: bool = False
     chapters: tuple[int, ...] = ()
     chapter: int | None = None
     audio: Tracks = Tracks()

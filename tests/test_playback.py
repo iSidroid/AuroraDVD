@@ -20,6 +20,8 @@ def fake_engine() -> Mock:
     engine.get_chapter_count.return_value = 3
     engine.get_chapter.return_value = 0
     engine.can_pause.return_value = True
+    engine.get_time.return_value = 12000
+    engine.is_seekable.return_value = True
 
     engine.audio_get_track_description.return_value = [
         (-1, b"Disable"), (12, b"Spanish"), (13, b"English"),
@@ -43,6 +45,9 @@ def player(tmp_path):
         Playing="playing", Paused="paused", Ended="ended", Stopped="stopped",
         Error="error",
     ))
+    backend._title_durations = {1: 120000, 2: 90000}
+    backend._vlc.TitleDescription = __import__("ctypes").c_int64
+    backend._vlc.libvlc_media_player_get_full_title_descriptions = Mock(return_value=0)
     backend._drive = tmp_path
     backend._chapter_index = Mock()
     backend._chapter_index.count.return_value = None
@@ -294,3 +299,223 @@ def test_play_reopens_available_disc_or_asks_for_a_drive(qapp, monkeypatch):
     window._controls.play_button.click()
     open_dvd.assert_called_once_with()
     window.close()
+
+
+
+def test_timeline_reports_title_duration_and_updates_while_paused(player):
+    backend, engine = player
+    engine.get_length.return_value = 15000  # Deliberately shorter PGC.
+    status = backend._read_controls(PlaybackState.PLAYING)
+    assert status.elapsed_ms == 12000
+    assert status.duration_ms == 120000
+    assert status.seekable
+
+    engine.get_state.return_value = "paused"
+    engine.get_time.return_value = 65000
+    published = Mock()
+    backend.controls_changed.connect(published)
+    backend._update_state()
+    status = published.call_args.args[1]
+    assert status.state == PlaybackState.PAUSED
+    assert status.elapsed_ms == 65000
+    assert status.duration_ms == 120000
+
+    engine.get_title.return_value = 2
+    assert backend._read_controls(PlaybackState.PLAYING).duration_ms == 90000
+    backend._title_durations.clear()
+    assert backend._read_controls(PlaybackState.PLAYING).duration_ms is None
+
+
+def test_seek_revalidates_session_title_and_capability(player):
+    backend, engine = player
+    backend.seek(8, 1, 45000)
+    engine.set_time.assert_called_once_with(45000)
+    backend.seek(8, 1, 999999)
+    engine.set_time.assert_called_with(120000)
+    engine.set_time.reset_mock()
+    backend.seek(7, 1, 10000)
+    backend.seek(8, 2, 10000)
+    engine.is_seekable.return_value = False
+    backend.seek(8, 1, 10000)
+    engine.is_seekable.return_value = True
+    backend._title_durations.clear()
+    backend.seek(8, 1, 10000)
+    engine.set_time.assert_not_called()
+
+
+def test_mute_keeps_volume_and_is_applied_after_resume(player):
+    backend, engine = player
+    backend.set_muted(True)
+    backend.set_volume(38)
+    backend._update_state()
+    engine.audio_set_mute.assert_called_with(True)
+    engine.audio_set_volume.assert_called_with(38)
+    backend.set_muted(False)
+    engine.audio_set_mute.assert_called_with(False)
+
+
+def test_progress_preview_does_not_seek_on_timer_updates(qapp):
+    from dataclasses import replace
+    from auroradvd.ui.widgets.playback_progress import PlaybackProgress, format_time
+
+    assert format_time(3661000) == "01:01:01"
+    assert format_time(None) == "--:--:--"
+    widget = PlaybackProgress()
+    seek = Mock()
+    widget.seek_requested.connect(seek)
+    status = PlaybackStatus(
+        state=PlaybackState.PLAYING, title=1, duration_ms=120000,
+        elapsed_ms=12000, seekable=True,
+    )
+    widget.update_status(status)
+    assert widget.elapsed.text() == "00:00:12"
+    assert widget.duration.text() == "00:02:00"
+    seek.assert_not_called()
+    widget.slider.setSliderDown(True)
+    widget.slider.setValue(5000)
+    widget.update_status(replace(status, elapsed_ms=14000))
+    assert widget.slider.value() == 5000
+    assert widget.elapsed.text() == "00:01:00"
+    seek.assert_not_called()
+    widget.slider.setSliderDown(False)
+    seek.assert_called_once_with(60000)
+
+    widget.slider.setSliderDown(True)
+    widget.slider.setValue(7000)
+    seek.reset_mock()
+    widget.update_status(replace(status, title=2, elapsed_ms=0))
+    seek.assert_not_called()
+    assert widget.slider.value() == 0
+
+    widget.update_status(replace(status, duration_ms=None, seekable=False))
+    assert not widget.slider.isEnabled()
+    assert widget.duration.text() == "--:--:--"
+    widget.update_status(PlaybackStatus())
+    assert widget.elapsed.text() == "00:00:00"
+    widget.close()
+
+
+def test_menus_actions_and_keyboard_share_commands(qapp, monkeypatch):
+    from PySide6.QtWidgets import QLineEdit
+
+    monkeypatch.setattr(
+        "auroradvd.ui.main_window.OpticalDriveService.get_optical_drives", lambda self: []
+    )
+    window = MainWindow()
+    window.show()
+    window.activateWindow()
+    qapp.processEvents()
+    monkeypatch.setattr(MainWindow, "isActiveWindow", lambda self: True)
+    names = [action.text() for action in window.menuBar().actions()]
+    assert names == ["&Archivo", "&Reproducción", "&Video", "A&udio", "&Herramientas", "A&yuda"]
+    assert len({name.split("&")[1][0].lower() for name in names}) == 6
+    assert window._actions.open_dvd.shortcut().toString() == "Ctrl+D"
+
+    pause = Mock()
+    stop = Mock()
+    chapter = Mock()
+    window._pause_requested.connect(pause)
+    window._stop_dvd_requested.connect(stop)
+    window._chapter_step_requested.connect(chapter)
+    window._playing_drive = Path("E:/")
+    status = PlaybackStatus(
+        state=PlaybackState.PLAYING, can_pause=True, title=1,
+        chapters=(1, 2, 3), chapter=2,
+    )
+    window._set_playback_status(status)
+    window.setFocus()
+    QTest.keyClick(window, Qt.Key.Key_Space)
+    pause.assert_called_once_with(0, True)
+    QTest.keyClick(window, Qt.Key.Key_M)
+    assert window._actions.mute.isChecked()
+    QTest.keyClick(window, Qt.Key.Key_Right, Qt.KeyboardModifier.ControlModifier)
+    chapter.assert_called_once_with(0, 1, 1)
+
+    edit = QLineEdit(window)
+    edit.show()
+    edit.setFocus()
+    qapp.processEvents()
+    QTest.keyClicks(edit, "s m")
+    assert edit.text() == "s m"
+    stop.assert_not_called()
+    assert window._actions.mute.isChecked()
+
+    window._controls.pause_button.click()
+    assert pause.call_count == 2
+    window._actions.stop.trigger()
+    stop.assert_called_once_with()
+    assert window._playback_status.state == PlaybackState.STOPPING
+    window._playback_stopped()
+    assert window._actions.play.isEnabled()
+    window.close()
+
+
+
+def test_native_title_metadata_is_released_and_cached(player):
+    import ctypes
+
+    backend, engine = player
+
+    class Title(ctypes.Structure):
+        _fields_ = [("duration", ctypes.c_int64)]
+
+    descriptions = [Title(0), Title(123456)]
+    pointers = (ctypes.POINTER(Title) * 2)(*[ctypes.pointer(item) for item in descriptions])
+
+    def read(player, output):
+        ctypes.cast(
+            output, ctypes.POINTER(ctypes.POINTER(Title))
+        )[0] = ctypes.cast(pointers, ctypes.POINTER(Title))
+        return 2
+
+    backend._title_durations.clear()
+    backend._vlc.TitleDescription = Title
+    backend._vlc.libvlc_media_player_get_full_title_descriptions = Mock(side_effect=read)
+    backend._vlc.libvlc_title_descriptions_release = Mock()
+    assert backend._title_duration(1) == 123456
+    assert backend._title_duration(1) == 123456
+    backend._vlc.libvlc_media_player_get_full_title_descriptions.assert_called_once()
+    backend._vlc.libvlc_title_descriptions_release.assert_called_once()
+    released = backend._vlc.libvlc_title_descriptions_release.call_args.args[0]
+    assert isinstance(released, ctypes.POINTER(ctypes.POINTER(Title)))
+    assert released[1].contents.duration == 123456
+
+
+
+def test_dynamic_menu_tracks_use_existing_selector_and_reject_old_title(qapp, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setattr(
+        "auroradvd.ui.main_window.OpticalDriveService.get_optical_drives", lambda self: []
+    )
+    window = MainWindow()
+    selected = Mock()
+    window._track_requested.connect(selected)
+    status = PlaybackStatus(
+        state=PlaybackState.PLAYING, title=1,
+        audio=Tracks(((12, "Español"), (13, "Inglés")), 12),
+    )
+    window._set_playback_status(status)
+    menu = window.menuBar().audio_tracks
+    window.menuBar()._fill(menu, window._controls.audio)
+    assert menu.actions()[0].isChecked()
+    menu.actions()[1].trigger()
+    selected.assert_called_once_with(0, 1, "audio", 13)
+    selected.reset_mock()
+    window._set_playback_status(replace(status, title=2))
+    menu.actions()[1].trigger()
+    selected.assert_not_called()
+    window.close()
+
+
+@pytest.mark.parametrize("ending", ["ended", "error"])
+def test_terminal_states_clear_timeline_and_release_media(player, ending):
+    backend, engine = player
+    engine.get_state.return_value = ending
+    finished = Mock()
+    backend.finished.connect(finished)
+    backend._update_state()
+    assert backend._drive is None
+    assert not backend._timer.isActive()
+    engine.set_media.assert_called_once_with(None)
+    finished.assert_called_once()

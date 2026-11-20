@@ -1,3 +1,4 @@
+import ctypes
 import os
 import sys
 from pathlib import Path
@@ -35,6 +36,8 @@ class DvdPlayer(QObject):
         self._chapter_index: DvdChapterIndex | None = None
         self._controls: PlaybackStatus | None = None
         self._volume = volume
+        self._muted = False
+        self._title_durations: dict[int, int] = {}
         self._playback_id = 0
         self._last_state = None
 
@@ -109,6 +112,8 @@ class DvdPlayer(QObject):
             self._drive = drive
             self._chapter_index = DvdChapterIndex(drive)
             self._player.audio_set_volume(self._volume)
+            self._player.audio_set_mute(self._muted)
+            self._player.video_set_key_input(False)
             if self._player.play() == -1:
                 self._stop()
                 raise DvdPlaybackError(f"No se pudo reproducir el DVD en {drive}.")
@@ -126,6 +131,7 @@ class DvdPlayer(QObject):
             self._drive = None
         self._last_state = None
         self._chapter_index = None
+        self._title_durations.clear()
         self._controls = None
 
     @Slot()
@@ -159,8 +165,44 @@ class DvdPlayer(QObject):
         if self._player is not None:
             self._player.audio_set_volume(self._volume)
 
+    @Slot(bool)
+    def set_muted(self, muted: bool) -> None:
+        self._muted = muted
+        if self._player is not None:
+            self._player.audio_set_mute(muted)
 
+    def _title_duration(self, title: int) -> int | None:
+        # DVD get_length() can describe the current PGC. Title descriptions
+        # report the full title, including titles that span several PGCs.
+        if title in self._title_durations:
+            return self._title_durations[title]
+        descriptions = ctypes.POINTER(self._vlc.TitleDescription)()
+        count = self._vlc.libvlc_media_player_get_full_title_descriptions(
+            self._player, ctypes.byref(descriptions)
+        )
+        if count <= 0:
+            return None
+        try:
+            pointers = ctypes.cast(
+                descriptions, ctypes.POINTER(ctypes.POINTER(self._vlc.TitleDescription))
+            )
+            self._title_durations = {
+                index: pointers[index].contents.duration
+                for index in range(count)
+                if pointers[index].contents.duration > 0
+            }
+        finally:
+            self._vlc.libvlc_title_descriptions_release(pointers, count)
+        return self._title_durations.get(title)
 
+    @Slot(int, int, object)
+    def seek(self, playback_id: int, title: int, milliseconds: int) -> None:
+        if not self._has_title(playback_id, title) or not self._player.is_seekable():
+            return
+        duration = self._title_duration(title)
+        if duration is not None:
+            self._player.set_time(max(0, min(milliseconds, duration)))
+            self._controls = None
 
     @Slot(int, int, int)
     def select_chapter(self, playback_id: int, title: int, chapter: int) -> None:
@@ -232,10 +274,18 @@ class DvdPlayer(QObject):
 
         chapters = self._chapter_numbers(title)
         current = self._player.get_chapter() + 1
+        duration = self._title_duration(title)
+        position = self._player.get_time()
+        elapsed = max(0, position) if position >= 0 else None
+        if elapsed is not None and duration is not None:
+            elapsed = min(elapsed, duration)
         return PlaybackStatus(
             state=state,
             can_pause=can_pause,
             title=title,
+            elapsed_ms=elapsed,
+            duration_ms=duration,
+            seekable=duration is not None and bool(self._player.is_seekable()),
             chapters=chapters,
             chapter=current if current in chapters else None,
             audio=self._read_tracks("audio"),
@@ -262,6 +312,7 @@ class DvdPlayer(QObject):
         if state == self._vlc.State.Playing:
             if changed:
                 self._player.audio_set_volume(self._volume)
+                self._player.audio_set_mute(self._muted)
                 self.playing.emit(self._playback_id, f"Reproduciendo DVD en {self._drive}")
             status = self._read_controls(PlaybackState.PLAYING)
         elif state == self._vlc.State.Paused:

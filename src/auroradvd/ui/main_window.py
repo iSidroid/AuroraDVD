@@ -16,7 +16,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
-from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import (
+    QApplication, QAbstractButton, QComboBox, QLineEdit, QMainWindow, QMessageBox,
+    QSlider, QSpinBox, QTextEdit, QPlainTextEdit,
+)
 
 from auroradvd.player.dvd_player import DvdPlayer
 from auroradvd.player.playback_status import PlaybackState, PlaybackStatus
@@ -48,6 +51,8 @@ class MainWindow(QMainWindow):
     _chapter_requested = Signal(int, int, int)
     _chapter_step_requested = Signal(int, int, int)
     _track_requested = Signal(int, int, str, int)
+    _seek_requested = Signal(int, int, object)
+    _mute_requested = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -100,6 +105,101 @@ class MainWindow(QMainWindow):
         self._exit_fullscreen_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._exit_fullscreen_shortcut.setEnabled(False)
         self._exit_fullscreen_shortcut.activated.connect(self._exit_fullscreen)
+        self._bind_actions()
+        QApplication.instance().installEventFilter(self)
+
+    def _bind_actions(self) -> None:
+        actions = self._actions
+        controls = self._controls
+        pairs = (
+            (actions.play, controls.play_button, controls.play_requested),
+            (actions.pause, controls.pause_button, None),
+            (actions.resume, controls.resume_button, None),
+            (actions.stop, controls.stop_button, controls.stop_requested),
+            (actions.previous, controls.previous_button, None),
+            (actions.next, controls.next_button, None),
+            (actions.fullscreen, controls.fullscreen_button, controls.fullscreen_requested),
+        )
+        for action, button, signal in pairs:
+            button.clicked.disconnect()
+            button.clicked.connect(action.trigger)
+            if signal is not None:
+                action.triggered.connect(signal)
+            self.addAction(action)
+        actions.pause.triggered.connect(lambda: controls.pause_requested.emit(True))
+        actions.resume.triggered.connect(lambda: controls.pause_requested.emit(False))
+        actions.previous.triggered.connect(lambda: controls.chapter_step_requested.emit(-1))
+        actions.next.triggered.connect(lambda: controls.chapter_step_requested.emit(1))
+        actions.pause_resume.triggered.connect(self._toggle_pause)
+        actions.mute.toggled.connect(self._mute_requested)
+        self.addAction(actions.open_dvd)
+        self.addAction(actions.mute)
+        actions.help.triggered.connect(self._show_help)
+        actions.about.triggered.connect(lambda: QMessageBox.about(
+            self, "AuroraDVD", "AuroraDVD\nReproductor de DVD para Windows."
+        ))
+        controls.progress.seek_requested.connect(self._seek)
+        self.menuBar().bind_selectors(controls)
+        self._sync_actions()
+
+    def _sync_actions(self) -> None:
+        for action, button in (
+            (self._actions.play, self._controls.play_button),
+            (self._actions.pause, self._controls.pause_button),
+            (self._actions.resume, self._controls.resume_button),
+            (self._actions.stop, self._controls.stop_button),
+            (self._actions.previous, self._controls.previous_button),
+            (self._actions.next, self._controls.next_button),
+        ):
+            action.setEnabled(button.isEnabled())
+        self._actions.pause_resume.setEnabled(
+            self._actions.pause.isEnabled() or self._actions.resume.isEnabled()
+        )
+        self.menuBar().update_selectors()
+
+    def _toggle_pause(self) -> None:
+        if self._actions.pause.isEnabled():
+            self._actions.pause.trigger()
+        elif self._actions.resume.isEnabled():
+            self._actions.resume.trigger()
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() not in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
+            return super().eventFilter(watched, event)
+        if not self.isActiveWindow() or QApplication.activeModalWidget() is not None:
+            return False
+        if QApplication.activePopupWidget() is not None or event.modifiers() != Qt.KeyboardModifier.NoModifier:
+            return False
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QAbstractButton, QComboBox, QLineEdit, QSlider,
+                              QSpinBox, QTextEdit, QPlainTextEdit)):
+            return False
+        action = {
+            Qt.Key.Key_Space: self._actions.pause_resume,
+            Qt.Key.Key_S: self._actions.stop,
+            Qt.Key.Key_M: self._actions.mute,
+        }.get(event.key())
+        if action is None or not action.isEnabled():
+            return False
+        event.accept()
+        if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat():
+            action.trigger()
+        return True
+
+    def _show_help(self) -> None:
+        QMessageBox.information(
+            self, "Atajos y uso",
+            "Ctrl+D  Abrir DVD\nEspacio  Pausar/reanudar\nS  Detener\n"
+            "Ctrl+Izquierda / Ctrl+Derecha  Capítulo anterior/siguiente\n"
+            "M  Silenciar\nF11  Pantalla completa\nEsc  Salir de pantalla completa\n\n"
+            "Arrastra la barra de progreso para buscar dentro del título.\n"
+            "Los atajos de una tecla respetan el control que tiene el foco."
+        )
+
+    def _seek(self, milliseconds: int) -> None:
+        self._seek_requested.emit(
+            self._playback_id, self._playback_status.title, milliseconds
+        )
 
     def _toggle_fullscreen(self) -> None:
         if self.isFullScreen():
@@ -124,6 +224,7 @@ class MainWindow(QMainWindow):
         self._status_bar.setVisible(not fullscreen)
         self._video_widget.set_fullscreen(fullscreen)
         self._exit_fullscreen_shortcut.setEnabled(fullscreen)
+        self._actions.fullscreen.setChecked(fullscreen)
 
 
     def _open_dvd(self) -> None:
@@ -184,6 +285,9 @@ class MainWindow(QMainWindow):
         self._chapter_requested.connect(player.select_chapter)
         self._chapter_step_requested.connect(player.step_chapter)
         self._track_requested.connect(player.select_track)
+        self._seek_requested.connect(player.seek)
+        self._mute_requested.connect(player.set_muted)
+        self._mute_requested.emit(self._actions.mute.isChecked())
         player.playing.connect(self._playback_started)
         player.finished.connect(self._playback_finished)
         player.stopped.connect(self._playback_stopped)
@@ -199,6 +303,7 @@ class MainWindow(QMainWindow):
     def _set_playback_status(self, status: PlaybackStatus) -> None:
         self._playback_status = status
         self._controls.update_status(status)
+        self._sync_actions()
 
     @Slot(int, object)
     def _apply_player_status(self, playback_id: int, status: PlaybackStatus) -> None:
