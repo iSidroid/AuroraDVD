@@ -519,3 +519,106 @@ def test_terminal_states_clear_timeline_and_release_media(player, ending):
     assert not backend._timer.isActive()
     engine.set_media.assert_called_once_with(None)
     finished.assert_called_once()
+
+
+
+def test_official_artwork_and_windows_icon_are_loadable(qapp):
+    from auroradvd.resources.branding import ICON_PATH, LOGO_PATH, application_icon, welcome_logo
+    from PySide6.QtCore import QSize
+
+    assert not welcome_logo().isNull()
+    icon = application_icon()
+    assert not icon.isNull()
+    assert ICON_PATH.is_file()
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        assert QSize(size, size) in icon.availableSizes()
+        assert not icon.pixmap(size, size).isNull()
+    assert LOGO_PATH.is_file()
+
+
+def test_application_sets_global_and_window_icons(qapp, monkeypatch):
+    from auroradvd import application
+
+    monkeypatch.setattr(application, "QApplication", lambda args: qapp)
+    monkeypatch.setattr(qapp, "exec", lambda: 0)
+    created = []
+
+    def create_window():
+        window = MainWindow()
+        created.append(window)
+        return window
+
+    monkeypatch.setattr(application, "MainWindow", create_window)
+    assert application.main() == 0
+    assert not qapp.windowIcon().isNull()
+    assert not created[0].windowIcon().isNull()
+    created[0].close()
+
+
+@pytest.mark.parametrize("size", [(180, 360), (600, 160), (900, 700)])
+def test_welcome_logo_keeps_aspect_and_stays_centered(qapp, monkeypatch, size):
+    from PySide6.QtGui import QPixmap
+    from auroradvd.ui.widgets.welcome_widget import WelcomeWidget
+
+    logo = QPixmap(320, 180)
+    logo.fill(Qt.GlobalColor.blue)
+    monkeypatch.setattr(
+        "auroradvd.ui.widgets.welcome_widget.welcome_logo", lambda: logo
+    )
+    welcome = WelcomeWidget()
+    welcome.resize(*size)
+    target = welcome.logo_rect()
+    assert target.center() == welcome.rect().center()
+    assert welcome.rect().contains(target)
+    assert abs(target.width() * 180 - target.height() * 320) <= 320
+    assert target.width() <= 420
+    assert target.height() <= 420
+    welcome.show()
+    qapp.processEvents()
+    assert not welcome.grab().isNull()
+    welcome.close()
+
+
+@pytest.mark.parametrize("terminal", ["stop", "finish", "error"])
+def test_welcome_play_pause_and_terminal_transitions(qapp, monkeypatch, terminal):
+    monkeypatch.setattr(
+        "auroradvd.ui.main_window.OpticalDriveService.get_optical_drives", lambda self: []
+    )
+    window = MainWindow()
+    window.show()
+    qapp.processEvents()
+    video = window._video_widget
+    welcome = video._placeholder
+    surface = video._surface
+    assert welcome.isVisible()
+    assert surface.isHidden()
+    native_handle = video.show_video()
+    window._playback_id = 5
+    window._playing_drive = Path("E:/")
+    window._set_playback_status(PlaybackStatus(state=PlaybackState.OPENING))
+    assert welcome.isHidden()
+
+    for state in (PlaybackState.PLAYING, PlaybackState.PAUSED, PlaybackState.PLAYING):
+        window._apply_player_status(5, PlaybackStatus(state=state, can_pause=True, title=1))
+        qapp.processEvents()
+        assert welcome.isHidden()
+        assert surface.isVisible()
+        assert int(surface.winId()) == native_handle
+        assert video._layout.currentWidget() is surface
+
+    # A late completion from the previous disc must not cover the film.
+    window._playback_finished(4, "Old playback ended")
+    assert welcome.isHidden()
+    if terminal == "stop":
+        window._request_stop()
+        assert welcome.isHidden()
+        window._playback_stopped()
+    else:
+        message = "Reproducción finalizada." if terminal == "finish" else "Error de lectura."
+        window._playback_finished(5, message)
+    qapp.processEvents()
+    assert welcome.isVisible()
+    assert surface.isHidden()
+    assert video._layout.currentWidget() is welcome
+    assert int(surface.winId()) == native_handle
+    window.close()

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QSlider, QSpinBox, QTextEdit, QPlainTextEdit,
 )
 
+from auroradvd.resources.branding import application_icon
 from auroradvd.player.dvd_player import DvdPlayer
 from auroradvd.player.playback_status import PlaybackState, PlaybackStatus
 from auroradvd.ui.actions import ApplicationActions
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(application_icon())
         self.resize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
         self._actions = ApplicationActions()
         self._optical_drive_service = OpticalDriveService()

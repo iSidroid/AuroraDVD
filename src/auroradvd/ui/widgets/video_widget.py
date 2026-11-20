@@ -4,7 +4,9 @@
 
 from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtGui import QCursor, QResizeEvent
-from PySide6.QtWidgets import QLabel, QStackedLayout, QWidget
+from PySide6.QtWidgets import QStackedLayout, QWidget
+
+from auroradvd.ui.widgets.welcome_widget import WelcomeWidget
 
 from auroradvd.ui.widgets.playback_controls import PlaybackControls
 
@@ -23,15 +25,10 @@ class VideoWidget(QWidget):
         self._hover_timer.setInterval(75)
         self._hover_timer.timeout.connect(self._update_control_visibility)
 
-        self._placeholder = QLabel("AuroraDVD\n\nNo hay ningún DVD cargado.")
-        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder = WelcomeWidget()
         self._surface = QWidget()
         self._surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         self._surface.setStyleSheet("background-color: #1e1e1e;")
-
-        self._placeholder.setStyleSheet(
-            "background-color: #1e1e1e; color: white; font-size: 18px;"
-        )
 
         self._layout = QStackedLayout(self)
         self._layout.addWidget(self._placeholder)

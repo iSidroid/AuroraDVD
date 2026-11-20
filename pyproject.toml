@@ -29,3 +29,6 @@ where = ["src"]
 dev = [
     "pytest>=8.0"
 ]
+
+[tool.setuptools.package-data]
+"auroradvd.resources" = ["*.png", "*.ico"]
